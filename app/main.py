@@ -1,42 +1,46 @@
-# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import get_settings
 import uvicorn
 
+settings = get_settings()
+
 app = FastAPI(
-    title="Abu Dhabi Government Services API",
+    title=settings.PROJECT_NAME,
     description="API for streamlining Abu Dhabi government services",
-    version="1.0.0"
+    version=settings.VERSION,
 )
 
 # Configure CORS
-origins = [
-    "http://localhost",
-    "http://localhost:3000",  # React default port
-    "http://localhost:8000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Basic test route
-@app.get("/")
+# API routes will be prefixed with /api/v1
+@app.get(f"{settings.API_V1_STR}/")
 async def root():
     return {
-        "message": "Welcome to Abu Dhabi Government Services API",
+        "message": f"Welcome to {settings.PROJECT_NAME}",
         "status": "active",
-        "version": "1.0.0"
+        "version": settings.VERSION
     }
 
-# Test route with parameters
-@app.get("/hello/{name}")
+@app.get(f"{settings.API_V1_STR}/hello/{{name}}")
 async def say_hello(name: str):
     return {"message": f"Hello, {name}!"}
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "api_version": settings.VERSION,
+        "service": settings.PROJECT_NAME
+    }
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
