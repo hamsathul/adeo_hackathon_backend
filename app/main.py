@@ -1,6 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.core.config import get_settings
+from app.db.session import get_db, engine
+from app.db.utils import check_database_connection
+from app.db.base_class import Base
+from typing import ForwardRef
+Role = ForwardRef('RoleSchema')
+from app.api.v1.endpoints import auth
+from datetime import datetime
 import uvicorn
 
 settings = get_settings()
@@ -20,6 +29,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# Test database connection
+@app.get("/test-db")
+async def test_db(db: Session = Depends(get_db)):
+    return check_database_connection(db)
+
 # API routes will be prefixed with /api/v1
 @app.get(f"{settings.API_V1_STR}/")
 async def root():
@@ -33,14 +52,52 @@ async def root():
 async def say_hello(name: str):
     return {"message": f"Hello, {name}!"}
 
-# Health check endpoint
 @app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "api_version": settings.VERSION,
-        "service": settings.PROJECT_NAME
-    }
+async def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1")).scalar()
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "api_version": settings.VERSION
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": str(e),
+            "api_version": settings.VERSION
+        }
+    
+# Basic database diagnostics
+@app.get("/diagnostics")
+async def database_diagnostics(db: Session = Depends(get_db)):
+    try:
+        diagnostics = {
+            # Test basic connection
+            "connection": db.execute(text("SELECT 1")).scalar() == 1,
+            
+            # Get database version
+            "version": db.execute(text("SELECT version()")).scalar(),
+            
+            # Get current database name
+            "database": db.execute(text("SELECT current_database()")).scalar(),
+            
+            # Get current user
+            "user": db.execute(text("SELECT current_user")).scalar(),
+            
+            # Timestamp
+            "timestamp": datetime.utcnow()
+        }
+        return {
+            "status": "success",
+            "diagnostics": diagnostics
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "timestamp": datetime.utcnow()
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
