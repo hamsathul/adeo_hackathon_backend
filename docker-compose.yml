@@ -8,7 +8,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/adeo_services
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/adeo_services
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       db:
         condition: service_healthy
@@ -16,14 +18,19 @@ services:
       - app-network
 
   db:
-    image: postgres:15-alpine
+    image: ankane/pgvector:latest
     container_name: postgres_db
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=adeo_services
+    command: >
+      -c 'max_locks_per_transaction=128'
+      -c 'shared_buffers=256MB'
+      -c 'effective_cache_size=768MB'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
