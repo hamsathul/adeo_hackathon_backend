@@ -59,6 +59,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 ### Using Docker Compose
 
+Complete Setup
+
+```bash
+make setup
+```
+
+Step by step build
+
 1. Build the Docker containers:
 ```bash
 make build
