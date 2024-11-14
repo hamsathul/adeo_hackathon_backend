@@ -1,3 +1,4 @@
+Here is the updated README file considering the provided Makefile:
 
 # Abu Dhabi Government Services API
 
@@ -8,6 +9,7 @@ A FastAPI backend service for streamlining Abu Dhabi government services.
 - Python 3.8 or higher
 - pip (Python package installer)
 - PostgreSQL (if using database features)
+- Docker and Docker Compose (for running the application in containers)
 
 ## Project Setup
 
@@ -17,35 +19,28 @@ git clone https://github.com/hamsathul/adeo_hackathon_backend.git
 cd adeo_hackathon_backend
 ```
 
-2. Create a virtual environment
+2. (Optional) Create and activate a virtual environment
 ```bash
 # Windows
 python -m venv venv
-
-# macOS/Linux
-python3 -m venv venv
-```
-
-3. Activate the virtual environment
-```bash
-# Windows
 venv\Scripts\activate
 
 # macOS/Linux
+python3 -m venv venv
 source venv/bin/activate
 ```
 
-4. Install dependencies
+3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-5. Create .env file
+4. Create `.env` file
 ```bash
 # Copy the example environment file
 cp .env.example .env
 
-# Edit .env with your settings
+# Edit `.env` with your settings
 nano .env
 ```
 
@@ -62,7 +57,26 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 ## Running the Application
 
-1. Make sure your virtual environment is activated
+### Using Docker Compose
+
+1. Build the Docker containers:
+```bash
+make build
+```
+
+2. Start the containers:
+```bash
+make up
+```
+
+3. The API will be available at:
+- Main API: http://localhost:8000
+- Interactive documentation (Swagger): http://localhost:8000/docs
+- Alternative documentation (ReDoc): http://localhost:8000/redoc
+
+### Using Python Directly
+
+1. Make sure your virtual environment is activated (if using one)
 
 2. Start the server:
 ```bash
@@ -73,6 +87,22 @@ uvicorn app.main:app --reload
 - Main API: http://localhost:8000
 - Interactive documentation (Swagger): http://localhost:8000/docs
 - Alternative documentation (ReDoc): http://localhost:8000/redoc
+
+## Common Make Commands
+
+```
+make help           # Show available commands
+make build          # Build containers
+make up             # Start containers
+make down           # Stop containers
+make logs           # View logs
+make shell          # Open API container shell
+make db-shell       # Open database shell
+make clean          # Remove containers and volumes
+make setup          # Complete setup (clean, build, migrate, init)
+make migrate        # Run database migrations
+make init           # Initialize the database
+```
 
 ## Project Structure
 
@@ -103,6 +133,11 @@ adeo_hackathon_backend/
 ├── requirements.txt
 ├── .env
 ├── README.md
+├── Makefile
+├── docker-compose.yml
+├── scripts/
+│   ├── setup.py
+│   ├── manage_db.py
 ```
 
 ## API Endpoints
@@ -162,7 +197,7 @@ pip install -r requirements.txt
 ```
 
 3. **Environment variables not loading**
-- Check if .env file exists
+- Check if `.env` file exists
 - Verify file permissions
 - Ensure variables are correctly formatted
 
@@ -172,4 +207,3 @@ pip install -r requirements.txt
 2. Make your changes
 3. Run tests
 4. Submit a pull request
-
