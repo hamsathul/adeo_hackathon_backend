@@ -28,11 +28,13 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    department_id = Column(Integer, ForeignKey('department.id'), nullable=True)    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     roles = relationship("Role", secondary=user_roles, back_populates="users")
+    department = relationship("Department", back_populates="users")
 
 class Role(Base):
     __tablename__ = "roles"  # Changed from 'role' to 'roles'

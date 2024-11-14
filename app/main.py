@@ -8,7 +8,9 @@ from app.db.utils import check_database_connection
 from app.db.base_class import Base
 from typing import ForwardRef
 Role = ForwardRef('RoleSchema')
-from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import auth, roles, permissions, departments
+from app.db.session import SessionLocal
+from app.api.v1.endpoints.permissions import init_default_permissions
 from datetime import datetime
 import uvicorn
 
@@ -30,6 +32,18 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(roles.router, prefix="/api/v1/auth", tags=["roles"]) 
+app.include_router(permissions.router, prefix="/api/v1/auth", tags=["permissions"])
+app.include_router(departments.router, prefix="/api/v1/auth", tags=["departments"])
+
+# Initialize default permissions on startup
+@app.on_event("startup")
+async def startup_event():
+    db = SessionLocal()
+    try:
+        await init_default_permissions(db)
+    finally:
+        db.close()
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
