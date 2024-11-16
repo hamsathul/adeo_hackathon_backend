@@ -1,0 +1,5 @@
+
+# config/tasks.yaml
+research_task:
+  description: "Research and analyze the topic: {query}. Provide comprehensive findings using available research tools."
+  expected_output: "Detailed research findings with relevant information and insights"

@@ -8,7 +8,7 @@ from app.db.utils import check_database_connection
 from app.db.base_class import Base
 from typing import ForwardRef
 Role = ForwardRef('RoleSchema')
-from app.api.v1.endpoints import auth, roles, permissions, departments, analysis
+from app.api.v1.endpoints import auth, roles, permissions, departments, analysis, crewai, googlecrew, search
 from app.db.session import SessionLocal
 from datetime import datetime
 import uvicorn
@@ -35,6 +35,11 @@ app.include_router(roles.router, prefix="/api/v1/auth", tags=["roles"])
 app.include_router(permissions.router, prefix="/api/v1/auth", tags=["permissions"])
 app.include_router(departments.router, prefix="/api/v1/auth", tags=["departments"])
 app.include_router(analysis.router, prefix="/api/v1", tags=["analysis"])
+app.include_router(crewai.router, prefix="/api/v1/crewai", tags=["research"])
+app.include_router(googlecrew.router, prefix="/api/v1/google", tags=["googlesearch"])
+app.include_router(search.router, prefix="/api/v1/search", tags=["search"])
+
+
 
 
 

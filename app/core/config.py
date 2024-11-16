@@ -1,6 +1,6 @@
 # app/core/config.py
 from pydantic import BaseModel
-from typing import List
+from typing import List, ClassVar
 from functools import lru_cache
 import os
 from dotenv import load_dotenv
@@ -29,8 +29,12 @@ class Settings(BaseModel):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     
 	# AI Settings
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+    GOOGLE_API_KEY: str = os.getenv("GEMINI_API_KEY")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
+    AI71_BASE_URL: ClassVar[str] = "https://api.ai71.ai/v1/"
+    AI71_API_KEY: str = os.getenv("AI71_API_KEY")
+    SERPER_API_KEY: str = os.getenv("SERPER_API_KEY")
     
         # Database Settings - Using Docker service name 'db'
     DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/adeo_services"
