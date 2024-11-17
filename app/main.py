@@ -16,6 +16,7 @@ from fastapi_socketio import SocketManager
 from app.api.v1.endpoints.chat import register_socket_events, get_chat_router
 import logging
 
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ app = FastAPI(
 # Configure CORS before SocketManager
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,7 +59,7 @@ sio = SocketManager(
     app=app,
     mount_location='',
     socketio_path='socket.io',
-    cors_allowed_origins=["*"],
+    cors_allowed_origins=["http://localhost:3000"],
     async_mode='asgi',
     logger=True,
     engineio_logger=True

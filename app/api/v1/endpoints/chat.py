@@ -12,6 +12,7 @@ import logging
 import json
 from typing import Dict, Optional
 import uuid
+from app.core.security import  get_user_from_token
 
 router = APIRouter()
 logger = logging.getLogger("chatbot.socket")
@@ -51,24 +52,40 @@ session_manager = SessionManager()
 async def handle_chat_message(sid: str, data: dict, db: Session, sio):
     """Handle incoming chat messages"""
     try:
+        # Get token from data
+        token = data.get('token')
+        if not token:
+            raise ValueError("Authentication required")
+
+        # Remove 'Bearer ' prefix if present
+        if token.startswith('Bearer '):
+            token = token.split(' ')[1]
+
+        # Verify token and get user
+        user = await get_user_from_token(token, db)
+        if not user:
+            raise ValueError("Invalid authentication")
+
+
         chat_handler = ChatHandler(db)
         chat_service = ChatService(db)
         
-        # Get user ID from session or data
-        user_id = data.get('user_id') or session_manager.get_user_id(sid)
+        # Use authenticated user's ID
+        user_id = user.id
         
-        # Validate user
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            logger.warning(f"User not found: {user_id}")
-            raise ValueError(f"User {user_id} not found")
-
         # Parse message content
         content = data.get('content', '').strip()
         if not content:
             raise ValueError("Message content cannot be empty")
 
         logger.info(f"Processing message from user {user_id}: {content[:50]}...")
+        
+        # Create and save user message
+        user_message = ChatMessageCreate(
+            content=content,
+            user_id=user_id,
+            is_bot=False
+        )
         
         # Create and save user message
         user_message = ChatMessageCreate(
@@ -138,26 +155,48 @@ async def handle_chat_message(sid: str, data: dict, db: Session, sio):
         logger.error(f"Error handling chat message: {str(e)}", exc_info=True)
         raise
 
+# app/api/v1/endpoints/chat.py
 def register_socket_events(sio):
-    """Register Socket.IO event handlers"""
-    
     @sio.on('connect')
-    async def handle_connect(sid, environ):
+    async def handle_connect(sid, environ, auth):  # Added auth parameter
         """Handle client connection"""
         try:
             logger.info(f"Client connecting: {sid}")
-            session_manager.create_session(sid)
+            
+            # Get token from auth headers or data
+           
+            token = None
+
+            if auth and isinstance(auth, dict):
+                token = auth.get('token')
+
+            if not token:
+                raise ValueError("Authentication required")
+
+            # Verify token
+            db = next(get_db())
+            user = await get_user_from_token(token, db)
+            
+            if not user:
+                raise ValueError("Invalid authentication")
+
+            session_manager.create_session(sid, user.id)
             await sio.emit('connect_response', {
                 "status": "connected",
                 "sid": sid,
+                "user_id": user.id,
                 "timestamp": datetime.utcnow().isoformat()
             }, to=sid)
+            
+            return True
+            
         except Exception as e:
             logger.error(f"Error in connect handler: {str(e)}", exc_info=True)
             await sio.emit('error', {
-                "message": "Connection error occurred",
+                "message": str(e),
                 "timestamp": datetime.utcnow().isoformat()
             }, to=sid)
+            return False  # Reject connection
 
     @sio.on('disconnect')
     def handle_disconnect(sid):
@@ -172,18 +211,30 @@ def register_socket_events(sio):
     async def handle_authenticate(sid, data):
         """Handle user authentication"""
         try:
-            user_id = data.get('user_id')
-            if user_id:
-                session_manager.create_session(sid, user_id)
-                await sio.emit('auth_response', {
-                    "status": "authenticated",
-                    "user_id": user_id,
-                    "timestamp": datetime.utcnow().isoformat()
-                }, to=sid)
+            token = data.get('token')
+            if not token:
+                raise ValueError("Token required")
+            
+            if token.startswith('Bearer '):
+                token = token.split(' ')[1]
+
+            db = next(get_db())
+            user = await get_user_from_token(token, db)
+            
+            if not user:
+                raise ValueError("Invalid token")
+
+            session_manager.create_session(sid, user.id)
+            await sio.emit('auth_response', {
+                "status": "authenticated",
+                "user_id": user.id,
+                "timestamp": datetime.utcnow().isoformat()
+            }, to=sid)
+            
         except Exception as e:
             logger.error(f"Error in authentication handler: {str(e)}", exc_info=True)
             await sio.emit('error', {
-                "message": "Authentication error occurred",
+                "message": str(e),
                 "timestamp": datetime.utcnow().isoformat()
             }, to=sid)
 
@@ -192,6 +243,14 @@ def register_socket_events(sio):
         """Handle chat messages via Socket.IO"""
         try:
             db = next(get_db())
+            
+            # Get user from session
+            user_id = session_manager.get_user_id(sid)
+            if not user_id:
+                raise ValueError("Session not found. Please authenticate.")
+            
+            # Add user_id to data
+            data['user_id'] = user_id
             
             # Pass sio instance to handle_chat_message
             result = await handle_chat_message(sid, data, db, sio)
@@ -220,7 +279,7 @@ def register_socket_events(sio):
                 "timestamp": datetime.utcnow().isoformat()
             }, to=sid)
 
-# REST endpoints remain unchanged
+    return True  # Return success from register_socket_events
 
 # REST endpoints
 @router.get("/history/{user_id}")

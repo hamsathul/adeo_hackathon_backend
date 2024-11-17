@@ -1,6 +1,7 @@
 # app/core/ai/chat_handler.py
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from openai import api_key
@@ -9,6 +10,9 @@ from datetime import datetime
 import uuid
 import logging
 import asyncio
+from app.core.config import get_settings
+
+settings=get_settings()
 
 logger = logging.getLogger("chatbot.ai")
 logger.setLevel(logging.INFO)
@@ -23,13 +27,23 @@ class ChatHandler:
         self.db = db
         
         logger.debug("Setting up AI model...")
-        self.model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-pro", 
-            temperature=0.3, 
-            top_k=40, 
-            top_p=0.8,
-            streaming=True  # Enable streaming
-        )
+        # self.model = ChatGoogleGenerativeAI(
+        #     model="gemini-1.5-pro", 
+        #     temperature=0.3, 
+        #     top_k=40, 
+        #     top_p=0.8,
+        #     streaming=True
+        # )
+        # self.model = ChatOpenAI(
+		# 	model="tiiuae/falcon-11b",
+		# 	api_key=settings.AI71_API_KEY,
+		# 	base_url=settings.AI71_BASE_URL,
+		# 	streaming=True,
+		# )
+        self.model = ChatGroq(
+			model="llama-3.1-70b-versatile",
+			streaming=True,
+		)
         
         logger.debug("Creating prompt template...")
         self.prompt = ChatPromptTemplate.from_messages([

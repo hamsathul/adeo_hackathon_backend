@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.auth import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -90,3 +93,27 @@ def check_permissions(required_permissions: List[str]):
         return current_user
     
     return permission_checker
+
+async def get_user_from_token(token: str, db: Session) -> Optional[User]:
+    try:
+        # Remove 'Bearer ' prefix if present
+        if token.startswith('Bearer '):
+            token = token.split(' ')[1]
+            
+        payload = jwt.decode(
+            token, 
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM]
+        )
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+            
+        user = db.query(User).filter(User.username == username).first()
+        return user
+    except JWTError as e:
+        logger.error(f"Token verification error: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in token verification: {str(e)}")
+        return None
