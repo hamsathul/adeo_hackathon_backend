@@ -32,7 +32,7 @@ def clean_json_output(output: str) -> str:
         raise ValueError(f"Invalid JSON after cleaning: {cleaned}")
 
 
-class DocumentProcessingCrew:
+class DepartmentDocumentProcessor:
     """CrewAI-based document processing system"""
 
     def __init__(self, db: Session, content: str):

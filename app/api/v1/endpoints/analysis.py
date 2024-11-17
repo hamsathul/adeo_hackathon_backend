@@ -12,7 +12,7 @@ from uuid import uuid4
 from datetime import datetime
 
 from app.db.session import get_db
-from app.core.ai.agents import DocumentProcessingCrew
+from app.core.ai.departmentdocprocessor import DepartmentDocumentProcessor
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -122,7 +122,7 @@ async def analyze_document(
         
         # Process document
         try:
-            processor = DocumentProcessingCrew(db, text)
+            processor = DepartmentDocumentProcessor(db, text)
             logger.info("Starting document processing...")
             
             # Process document and wait for result
