@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 import json
 from typing import Dict, Optional
+import uuid
 
 router = APIRouter()
 logger = logging.getLogger("chatbot.socket")
@@ -47,7 +48,7 @@ class SessionManager:
 
 session_manager = SessionManager()
 
-async def handle_chat_message(sid: str, data: dict, db: Session):
+async def handle_chat_message(sid: str, data: dict, db: Session, sio):
     """Handle incoming chat messages"""
     try:
         chat_handler = ChatHandler(db)
@@ -78,21 +79,49 @@ async def handle_chat_message(sid: str, data: dict, db: Session):
         user_db_message = chat_service.create_message(user_message)
         logger.debug(f"User message saved with ID: {user_db_message.id}")
         
-        # Get AI response
-        ai_response = await chat_handler.handle_message(
-            message=content,
-            user_id=str(user.id)
-        )
-        logger.debug("AI response generated")
+        # Initialize streaming response
+        ai_message_id = str(uuid.uuid4())
+        accumulated_content = []
         
-        # Create and save AI message
+        # Stream AI response
+        async for chunk in chat_handler.handle_message_stream(content, str(user.id)):
+            if not chunk["is_complete"]:
+                accumulated_content.append(chunk["content"])
+                # Emit streaming chunk
+                await sio.emit('message_received', {
+                    "type": "ai_message_chunk",
+                    "message": {
+                        "id": ai_message_id,
+                        "content": chunk["content"],
+                        "timestamp": chunk["timestamp"].isoformat(),
+                        "is_bot": True,
+                        "is_streaming": True
+                    }
+                }, to=sid)
+            
+        # Combine all chunks
+        complete_content = "".join(accumulated_content)
+        
+        # Create and save complete AI message
         ai_message = ChatMessageCreate(
-            content=ai_response["content"],
+            content=complete_content,
             user_id=user.id,
             is_bot=True
         )
         ai_db_message = chat_service.create_message(ai_message)
         logger.debug(f"AI message saved with ID: {ai_db_message.id}")
+        
+        # Emit completion message
+        await sio.emit('message_received', {
+            "type": "ai_message_complete",
+            "message": {
+                "id": str(ai_db_message.id),
+                "content": complete_content,
+                "timestamp": ai_db_message.timestamp.isoformat(),
+                "is_bot": True,
+                "is_streaming": False
+            }
+        }, to=sid)
         
         # Update session activity
         session_manager.update_session(sid)
@@ -163,7 +192,9 @@ def register_socket_events(sio):
         """Handle chat messages via Socket.IO"""
         try:
             db = next(get_db())
-            result = await handle_chat_message(sid, data, db)
+            
+            # Pass sio instance to handle_chat_message
+            result = await handle_chat_message(sid, data, db, sio)
             
             # Emit user message acknowledgment
             await sio.emit('message_received', {
@@ -173,17 +204,6 @@ def register_socket_events(sio):
                     "content": result["user_message"].content,
                     "timestamp": result["user_message"].timestamp.isoformat(),
                     "is_bot": False
-                }
-            }, to=sid)
-            
-            # Emit AI response
-            await sio.emit('message_received', {
-                "type": "ai_message",
-                "message": {
-                    "id": str(result["ai_message"].id),
-                    "content": result["ai_message"].content,
-                    "timestamp": result["ai_message"].timestamp.isoformat(),
-                    "is_bot": True
                 }
             }, to=sid)
             
@@ -199,6 +219,8 @@ def register_socket_events(sio):
                 "message": "An error occurred processing your message",
                 "timestamp": datetime.utcnow().isoformat()
             }, to=sid)
+
+# REST endpoints remain unchanged
 
 # REST endpoints
 @router.get("/history/{user_id}")
