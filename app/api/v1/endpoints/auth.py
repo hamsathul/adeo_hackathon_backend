@@ -14,6 +14,9 @@ from app.schemas.auth import (
 from datetime import timedelta
 from app.core.config import get_settings
 from jose import JWTError, jwt
+import logging
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -66,25 +69,57 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """Login to get access token"""
-    # Try to create first superuser if no users exist
-    await create_first_superuser(db)
-    
-    # Authenticate user
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        # Try to create first superuser if no users exist
+        await create_first_superuser(db)
+        
+        # Authenticate user
+        user = db.query(User).filter(User.username == form_data.username).first()
+        if not user or not verify_password(form_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Create access token with proper expiration
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        # Get department details if available
+        department_name = None
+        department_code = None
+        if user.department:
+            department_name = user.department.name
+            department_code = user.department.code
+        
+        # Create token data with all required fields
+        token_data = {
+            "sub": user.username,
+            "user_id": user.id,
+            "department_id": user.department_id if user.department_id else None,
+            "department_name": department_name,
+            "department_code": department_code,
+            "roles": [role.name for role in user.roles],
+            "is_superuser": user.is_superuser
+        }
+        
+        access_token = create_access_token(
+            data=token_data,
+            user=user,
+            expires_delta=access_token_expires
         )
-    
-    # Create access token with proper expiration
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during login"
+        )
+
+
+
 
 # Dependencies for protected routes
 async def get_current_user(

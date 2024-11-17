@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.auth import User
+from app.schemas.auth import TokenData
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, user: User, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
+    
+    # Add user ID
+    to_encode["user_id"] = user.id
+    
+    # Add department ID if available
+    if user.department_id:
+        to_encode["department_id"] = user.department_id
+    
+    # Add roles
+    to_encode["roles"] = [role.name for role in user.roles]
+    
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
@@ -50,18 +62,26 @@ async def get_current_user(
             settings.SECRET_KEY, 
             algorithms=[settings.ALGORITHM]
         )
-        username: str = payload.get("sub")
-        if username is None:
+        token_data = TokenData(
+            username=payload.get("sub"),
+            user_id=payload.get("user_id"),
+            department_id=payload.get("department_id"),
+            department_name=payload.get("department_name"),
+            department_code=payload.get("department_code"),
+            roles=payload.get("roles", []),
+            scopes=payload.get("scopes", []),
+            is_superuser=payload.get("is_superuser", False)
+        )
+        if token_data.username is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
         
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise credentials_exception
     
     return user
-
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
 ) -> User:

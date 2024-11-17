@@ -14,7 +14,13 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+    user_id: Optional[int] = None
+    department_id: Optional[int] = None
+    department_name: Optional[str] = None
+    department_code: Optional[str] = None
+    roles: List[str] = []
     scopes: List[str] = []
+    is_superuser: bool = False
 
 # User models
 class UserBase(BaseModel):
