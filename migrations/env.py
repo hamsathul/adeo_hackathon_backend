@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from app.db.base_class import Base
 from app.models.auth import User, Role, Permission
 from app.models.department import Department
+from app.models.chat import ChatMessage
 from app.core.config import get_settings
 
 settings = get_settings()

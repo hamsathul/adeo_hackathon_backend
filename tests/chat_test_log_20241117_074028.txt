@@ -1,0 +1,22 @@
+=== Chat Test Results ===
+
+
+Type: response
+Time: 2024-11-17T07:40:12.371244
+Data: {'status': 'Message received', 'data': {'room_id': 'test_room_1', 'message': 'What can you tell me about Abu Dhabi?', 'user_id': 'test_user_bfb9624a', 'timestamp': '2024-11-17T07:40:12.368619'}}
+--------------------------------------------------
+
+Type: response
+Time: 2024-11-17T07:40:14.373751
+Data: {'status': 'Message received', 'data': {'room_id': 'test_room_1', 'message': 'What services do you provide?', 'user_id': 'test_user_bfb9624a', 'timestamp': '2024-11-17T07:40:14.371665'}}
+--------------------------------------------------
+
+Type: response
+Time: 2024-11-17T07:40:16.377027
+Data: {'status': 'Message received', 'data': {'room_id': 'test_room_1', 'message': 'Can you help me with government procedures?', 'user_id': 'test_user_bfb9624a', 'timestamp': '2024-11-17T07:40:16.374911'}}
+--------------------------------------------------
+
+Type: response
+Time: 2024-11-17T07:40:18.380091
+Data: {'status': 'Message received', 'data': {'room_id': 'test_room_1', 'message': 'How do I apply for a business license?', 'user_id': 'test_user_bfb9624a', 'timestamp': '2024-11-17T07:40:18.378208'}}
+--------------------------------------------------

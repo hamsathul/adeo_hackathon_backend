@@ -35,6 +35,7 @@ class User(Base):
     # Relationships
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     department = relationship("Department", back_populates="users")
+    chat_messages = relationship("ChatMessage", back_populates="user")
 
 class Role(Base):
     __tablename__ = "roles"  # Changed from 'role' to 'roles'

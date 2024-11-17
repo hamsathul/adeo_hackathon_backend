@@ -9,8 +9,13 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/adeo_services
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - AI71_API_KEY=${AI71_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      - EXA_API_KEY=${EXA_API_KEY}
+
     depends_on:
       db:
         condition: service_healthy
