@@ -5,6 +5,7 @@ from fastapi.encoders import jsonable_encoder
 import json
 from fastapi.responses import FileResponse
 from pydantic_core import ValidationError
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
@@ -43,7 +44,9 @@ from app.schemas.opinion import (
     DocumentInDB,
     RemarkInDB,
     WorkflowHistoryInDB,
-    PriorityEnum
+    PriorityEnum,
+    WorkflowStatusBase,
+    WorkflowStatusList
 )
 
 # Configure logging
@@ -1255,3 +1258,131 @@ async def get_department_statistics(
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@router.get("/workflow_status/", response_model=WorkflowStatusList)
+async def get_workflow_status(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    Fetch all workflow statuses.
+    
+    Returns:
+        WorkflowStatusList: List of workflow statuses with total count
+    """
+    try:
+        # Get total count
+        total = db.query(WorkflowStatus).count()
+        
+        # Get paginated results
+        statuses = (
+            db.query(WorkflowStatus)
+            .order_by(WorkflowStatus.name)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        
+        return WorkflowStatusList(
+            total=total,
+            items=statuses
+        )
+    except Exception as e:
+        logging.error(f"Error fetching workflow statuses: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while fetching workflow statuses: {str(e)}"
+        )
+        
+@router.get("/workflow_status/{status_id}", response_model=WorkflowStatusBase)
+async def get_workflow_status_by_id(
+    status_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Fetch a specific workflow status by ID.
+    
+    Args:
+        status_id: The ID of the workflow status to retrieve
+        
+    Returns:
+        WorkflowStatusBase: The requested workflow status
+        
+    Raises:
+        HTTPException: If the status is not found
+    """
+    try:
+        status = db.query(WorkflowStatus).filter(WorkflowStatus.id == status_id).first()
+        if not status:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow status with ID {status_id} not found"
+            )
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching workflow status {status_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while fetching workflow status: {str(e)}"
+        )
+        
+@router.get("/workflow_status/search/", response_model=WorkflowStatusList)
+async def search_workflow_status(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    query: str = None,
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    Search workflow statuses by name or description.
+    
+    Args:
+        query: Search string to filter statuses
+        skip: Number of records to skip (pagination)
+        limit: Maximum number of records to return
+        
+    Returns:
+        WorkflowStatusList: List of matching workflow statuses with total count
+    """
+    try:
+        base_query = db.query(WorkflowStatus)
+        
+        if query:
+            search = f"%{query}%"
+            base_query = base_query.filter(
+                or_(
+                    WorkflowStatus.name.ilike(search),
+                    WorkflowStatus.description.ilike(search)
+                )
+            )
+        
+        # Get total count
+        total = base_query.count()
+        
+        # Get paginated results
+        statuses = (
+            base_query
+            .order_by(WorkflowStatus.name)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        
+        return WorkflowStatusList(
+            total=total,
+            items=statuses
+        )
+    except Exception as e:
+        logging.error(f"Error searching workflow statuses: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while searching workflow statuses: {str(e)}"
+        )

@@ -336,7 +336,22 @@ class OpinionRequestList(BaseModel):
     class Config:
         from_attributes = True
         
-        
+# In app/schemas/opinion.py
+
+class WorkflowStatusBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowStatusList(BaseModel):
+    total: int
+    items: List[WorkflowStatusBase]
+
+    class Config:
+        from_attributes = True
 
 
 OpinionInDB.model_rebuild()
