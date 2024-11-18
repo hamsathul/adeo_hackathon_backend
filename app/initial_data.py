@@ -5,7 +5,9 @@ from app.models.department import Department
 from app.core.security import get_password_hash
 from app.models.opinion import (
     WorkflowStatus, 
-    CommunicationType
+    CommunicationType,
+    Category,
+    SubCategory
 )
 
 def init_permissions(db: Session) -> dict:
@@ -491,8 +493,90 @@ def add_opinion_permissions(db: Session, permissions: dict):
     
     db.commit()
     return permissions
+def init_categories_and_subcategories(db: Session) -> dict:
+    """Initialize categories and subcategories"""
+    categories_data = {
+        "Projects and Initiatives": [
+            "Project or Initiative",
+            "Hosting/Holding an Event",
+            "Cancelling a Project"
+        ],
+        "Policies and Strategies": [
+            "General Policy",
+            "Strategy/Executive Plan for an Entity",
+            "Change in the Approved Executive Plan",
+            "Strategy for a Pillar/Sector"
+        ],
+        "Governance and Legislation": [
+            "Local Legislation",
+            "Federal Legislation",
+            "Governance Mechanisms",
+            "Committees/Councils and Powers",
+            "Complex/Responsive Memoranda",
+            "Legislative Permission",
+            "Agreements",
+            "Memoranda of Understanding"
+        ],
+        "Infrastructure, Land and Assets": [
+            "Leasing a Headquarter",
+            "Land and Assets"
+        ],
+        "Human Capital": [
+            "Organizational Structures",
+            "Talent Management and Manpower for the Administration",
+            "Manpower Exceptions"
+        ],
+        "Financial Requests": [
+            "Contracts",
+            "Purchases",
+            "Fees, Tariffs and Taxes",
+            "Financial Transfers",
+            "Additional Budget for Projects",
+            "Additional Budget Or financial transfer on the first door",
+            "Additional budget (jobs, employment contracts)",
+            "Acceptance of a sponsorship request"
+        ],
+        "Reports and Studies": []
+    }
+    
+    category_objects = {}
+    
+    for category_name, subcategories in categories_data.items():
+        # Create or get category
+        db_category = db.query(Category).filter(
+            Category.name == category_name
+        ).first()
+        
+        if not db_category:
+            db_category = Category(name=category_name)
+            db.add(db_category)
+            db.flush()  # Get ID for subcategories
+            
+        category_objects[category_name] = {
+            "category": db_category,
+            "subcategories": []
+        }
+        
+        # Create subcategories
+        for subcategory_name in subcategories:
+            db_subcategory = db.query(SubCategory).filter(
+                SubCategory.category_id == db_category.id,
+                SubCategory.name == subcategory_name
+            ).first()
+            
+            if not db_subcategory:
+                db_subcategory = SubCategory(
+                    category_id=db_category.id,
+                    name=subcategory_name
+                )
+                db.add(db_subcategory)
+            
+            category_objects[category_name]["subcategories"].append(db_subcategory)
+    
+    db.commit()
+    return category_objects
 
-# Update init_db function
+# Update init_db function to include categories and subcategories
 def init_db(db: Session) -> None:
     """Initialize database with default data"""
     try:
@@ -516,6 +600,9 @@ def init_db(db: Session) -> None:
         print("Initializing departments...")
         departments = init_departments(db)
         
+        print("Initializing categories and subcategories...")  # Add this line
+        categories = init_categories_and_subcategories(db)     # Add this line
+        
         print("Initializing workflow statuses...")
         workflow_statuses = init_workflow_statuses(db)
         
@@ -534,7 +621,7 @@ def init_db(db: Session) -> None:
     finally:
         db.close()
 
-# Update check_init_status function
+# Update check_init_status function to include categories
 def check_init_status(db: Session) -> dict:
     """Check the initialization status of the database"""
     try:
@@ -545,10 +632,11 @@ def check_init_status(db: Session) -> dict:
             "users": db.query(User).count(),
             "superusers": db.query(User).filter(User.is_superuser == True).count(),
             "workflow_statuses": db.query(WorkflowStatus).count(),
-            "communication_types": db.query(CommunicationType).count()
+            "communication_types": db.query(CommunicationType).count(),
+            "categories": db.query(Category).count(),           # Add this line
+            "subcategories": db.query(SubCategory).count()     # Add this line
         }
         return status
     except Exception as e:
         print(f"Error checking initialization status: {e}")
         raise
-    

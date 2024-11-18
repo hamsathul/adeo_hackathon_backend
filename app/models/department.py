@@ -13,3 +13,7 @@ class Department(Base):
 
     # Relationship with users
     users = relationship("User", back_populates="department")
+    
+        # Opinion relationships
+    opinion_requests = relationship("OpinionRequest", back_populates="department")
+    opinions = relationship("Opinion", back_populates="department")

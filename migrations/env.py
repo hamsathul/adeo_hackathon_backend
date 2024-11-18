@@ -18,11 +18,14 @@ from app.models.opinion import (
     WorkflowStatus,
     OpinionRequest,
     Document,
+    Category,
+    SubCategory,
+    Remark,
     RequestAssignment,
     Opinion,
     CommunicationType,
     InterdepartmentalCommunication,
-    WorkflowHistory
+    WorkflowHistory,
 )
 from app.core.config import get_settings
 
@@ -39,7 +42,16 @@ if config.config_file_name is not None:
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Add your model's MetaData object here for 'autogenerate' support
+# Make sure all models are imported before this line
 target_metadata = Base.metadata
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Defines which objects should be included in the migration."""
+    # Add any tables that should be ignored in migrations
+    ignored_tables = []
+    if type_ == "table" and name in ignored_tables:
+        return False
+    return True
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -49,6 +61,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -68,6 +82,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
             compare_type=True,
         )
 

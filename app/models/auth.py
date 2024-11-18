@@ -36,6 +36,43 @@ class User(Base):
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     department = relationship("Department", back_populates="users")
     chat_messages = relationship("ChatMessage", back_populates="user")
+    opinion_requests = relationship("OpinionRequest", foreign_keys="OpinionRequest.requester_id", back_populates="requester")
+    deleted_opinions = relationship("OpinionRequest", foreign_keys="OpinionRequest.deleted_by", back_populates="deleted_by_user")
+    
+    # Document relationship
+    uploaded_documents = relationship("Document", back_populates="uploader")
+    
+    # Remark relationship
+    remarks = relationship("Remark", back_populates="user")
+    
+    # RequestAssignment relationships
+    assigned_requests = relationship("RequestAssignment", 
+                                   foreign_keys="RequestAssignment.assigned_by", 
+                                   back_populates="assigner")
+    expert_assignments = relationship("RequestAssignment", 
+                                    foreign_keys="RequestAssignment.expert_id", 
+                                    back_populates="expert")
+    
+    # Opinion relationships
+    expert_opinions = relationship("Opinion",
+                                 foreign_keys="Opinion.expert_id",
+                                 back_populates="expert")
+    reviewed_opinions = relationship("Opinion",
+                                   foreign_keys="Opinion.reviewed_by",
+                                   back_populates="reviewer")
+    
+    # WorkflowHistory relationship
+    workflow_actions = relationship("WorkflowHistory",
+                                  foreign_keys="WorkflowHistory.action_by",
+                                  back_populates="actor")
+    
+    # Communication relationships
+    sent_communications = relationship("InterdepartmentalCommunication",
+                                     foreign_keys="InterdepartmentalCommunication.from_user_id",
+                                     back_populates="from_user")
+    received_communications = relationship("InterdepartmentalCommunication",
+                                         foreign_keys="InterdepartmentalCommunication.to_user_id",
+                                         back_populates="to_user")
 
 class Role(Base):
     __tablename__ = "roles"  # Changed from 'role' to 'roles'
