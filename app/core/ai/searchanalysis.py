@@ -30,7 +30,6 @@ class ResearchAnalyzer:
                query=self.query,
                search_type='search'
            )
-           print(f"Search results: {search_results}")
            
            analysis_prompt = f"""
            Analyze these search results about {self.query}:
