@@ -1,8 +1,8 @@
-"""add_opinion_system
+"""Initial_migration
 
-Revision ID: 5696f4f60017
-Revises: 406d08627044
-Create Date: 2024-11-18 08:53:06.505914
+Revision ID: b25e2f82ea89
+Revises: 
+Create Date: 2024-11-18 11:04:08.558897
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '5696f4f60017'
-down_revision: Union[str, None] = '406d08627044'
+revision: str = 'b25e2f82ea89'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -29,6 +29,33 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('department',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('code', sa.String(), nullable=False),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_department_code'), 'department', ['code'], unique=True)
+    op.create_index(op.f('ix_department_name'), 'department', ['name'], unique=True)
+    op.create_table('permissions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_permissions_name'), 'permissions', ['name'], unique=True)
+    op.create_table('roles',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_roles_name'), 'roles', ['name'], unique=True)
     op.create_table('workflow_status',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=50), nullable=False),
@@ -36,6 +63,37 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
+    )
+    op.create_table('role_permissions',
+    sa.Column('role_id', sa.Integer(), nullable=True),
+    sa.Column('permission_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['permission_id'], ['permissions.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE')
+    )
+    op.create_table('users',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('email', sa.String(), nullable=False),
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('hashed_password', sa.String(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('is_superuser', sa.Boolean(), nullable=True),
+    sa.Column('department_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['department_id'], ['department.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
+    op.create_table('chat_messages',
+    sa.Column('id', sa.String(), nullable=False),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('timestamp', sa.DateTime(), nullable=True),
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('is_bot', sa.Boolean(), nullable=True),
+    sa.Column('read', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('opinion_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -58,6 +116,12 @@ def upgrade() -> None:
     )
     op.create_index('idx_opinion_requests_department', 'opinion_requests', ['department_id'], unique=False)
     op.create_index('idx_opinion_requests_status', 'opinion_requests', ['current_status_id'], unique=False)
+    op.create_table('user_roles',
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('role_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE')
+    )
     op.create_table('documents',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('opinion_request_id', sa.Integer(), nullable=True),
@@ -150,8 +214,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_workflow_history_request', 'workflow_history', ['opinion_request_id'], unique=False)
-    op.drop_index('ix_cmetadata_gin', table_name='langchain_pg_embedding', postgresql_using='gin')
-    op.drop_index('ix_langchain_pg_embedding_id', table_name='langchain_pg_embedding')
+    op.drop_index('langchain_pg_embedding_embedding_idx', table_name='langchain_pg_embedding', postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
     op.drop_table('langchain_pg_embedding')
     op.drop_table('langchain_pg_collection')
     # ### end Alembic commands ###
@@ -160,24 +223,18 @@ def upgrade() -> None:
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     op.create_table('langchain_pg_collection',
-    sa.Column('uuid', sa.UUID(), autoincrement=False, nullable=False),
-    sa.Column('name', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('cmetadata', postgresql.JSON(astext_type=sa.Text()), autoincrement=False, nullable=True),
-    sa.PrimaryKeyConstraint('uuid', name='langchain_pg_collection_pkey'),
-    sa.UniqueConstraint('name', name='langchain_pg_collection_name_key'),
-    postgresql_ignore_search_path=False
+    sa.Column('name', sa.TEXT(), autoincrement=False, nullable=False),
+    sa.Column('cmetadata', postgresql.JSONB(astext_type=sa.Text()), autoincrement=False, nullable=True),
+    sa.PrimaryKeyConstraint('name', name='langchain_pg_collection_pkey')
     )
     op.create_table('langchain_pg_embedding',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('collection_id', sa.UUID(), autoincrement=False, nullable=True),
-    sa.Column('embedding', sa.NullType(), autoincrement=False, nullable=True),
-    sa.Column('document', sa.VARCHAR(), autoincrement=False, nullable=True),
+    sa.Column('uuid', sa.UUID(), autoincrement=False, nullable=False),
     sa.Column('cmetadata', postgresql.JSONB(astext_type=sa.Text()), autoincrement=False, nullable=True),
-    sa.ForeignKeyConstraint(['collection_id'], ['langchain_pg_collection.uuid'], name='langchain_pg_embedding_collection_id_fkey', ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id', name='langchain_pg_embedding_pkey')
+    sa.Column('document', sa.TEXT(), autoincrement=False, nullable=True),
+    sa.Column('embedding', sa.NullType(), autoincrement=False, nullable=True),
+    sa.PrimaryKeyConstraint('uuid', name='langchain_pg_embedding_pkey')
     )
-    op.create_index('ix_langchain_pg_embedding_id', 'langchain_pg_embedding', ['id'], unique=True)
-    op.create_index('ix_cmetadata_gin', 'langchain_pg_embedding', ['cmetadata'], unique=False, postgresql_using='gin')
+    op.create_index('langchain_pg_embedding_embedding_idx', 'langchain_pg_embedding', ['embedding'], unique=False, postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
     op.drop_index('idx_workflow_history_request', table_name='workflow_history')
     op.drop_table('workflow_history')
     op.drop_table('request_assignments')
@@ -185,9 +242,22 @@ def downgrade() -> None:
     op.drop_table('opinions')
     op.drop_table('interdepartmental_communications')
     op.drop_table('documents')
+    op.drop_table('user_roles')
     op.drop_index('idx_opinion_requests_status', table_name='opinion_requests')
     op.drop_index('idx_opinion_requests_department', table_name='opinion_requests')
     op.drop_table('opinion_requests')
+    op.drop_table('chat_messages')
+    op.drop_index(op.f('ix_users_username'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
+    op.drop_table('role_permissions')
     op.drop_table('workflow_status')
+    op.drop_index(op.f('ix_roles_name'), table_name='roles')
+    op.drop_table('roles')
+    op.drop_index(op.f('ix_permissions_name'), table_name='permissions')
+    op.drop_table('permissions')
+    op.drop_index(op.f('ix_department_name'), table_name='department')
+    op.drop_index(op.f('ix_department_code'), table_name='department')
+    op.drop_table('department')
     op.drop_table('communication_types')
     # ### end Alembic commands ###

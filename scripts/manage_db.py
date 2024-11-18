@@ -47,7 +47,7 @@ def init(force):
             click.echo("Forcing reinitialization... Cleaning existing data...")
             try:
                 db.execute(text("""
-                    TRUNCATE TABLE users, roles, permissions, departments, 
+                    TRUNCATE TABLE users, roles, permissions, department, 
                     user_roles, role_permissions RESTART IDENTITY CASCADE;
                 """))
                 db.commit()
@@ -71,7 +71,7 @@ def verify():
     db = SessionLocal()
     try:
         # Check each table
-        tables = ['users', 'roles', 'permissions', 'departments']
+        tables = ['users', 'roles', 'permissions', 'department']
         status = {}
         
         for table in tables:
@@ -92,7 +92,7 @@ def verify():
         click.echo(f"Super Admin users: {super_admin}")
         
         # Check departments
-        dept_list = db.execute(text("SELECT code, name FROM departments")).fetchall()
+        dept_list = db.execute(text("SELECT code, name FROM department")).fetchall()
         click.echo("\nDepartments:")
         for dept in dept_list:
             click.echo(f"- {dept.code}: {dept.name}")
@@ -110,7 +110,7 @@ def verify():
         db.close()
 
 @cli.command()
-@click.option('--type', 'entity_type', type=click.Choice(['users', 'roles', 'departments', 'permissions']), 
+@click.option('--type', 'entity_type', type=click.Choice(['users', 'roles', 'department', 'permissions']), 
               help='Type of entity to list')
 def list(entity_type):
     """List entities in the database"""
@@ -120,7 +120,7 @@ def list(entity_type):
             result = db.execute(text("""
                 SELECT u.username, u.email, d.code as department, r.name as role, u.is_superuser
                 FROM users u
-                LEFT JOIN departments d ON u.department_id = d.id
+                LEFT JOIN department d ON u.department_id = d.id
                 LEFT JOIN user_roles ur ON u.id = ur.user_id
                 LEFT JOIN roles r ON ur.role_id = r.id
                 ORDER BY u.username
@@ -155,11 +155,11 @@ def list(entity_type):
                 click.echo(f"Permissions: {role.permissions}")
                 click.echo("---")
                 
-        elif entity_type == 'departments':
+        elif entity_type == 'department':
             result = db.execute(text("""
                 SELECT d.code, d.name, d.description,
                        COUNT(u.id) as user_count
-                FROM departments d
+                FROM department d
                 LEFT JOIN users u ON d.id = u.department_id
                 GROUP BY d.id, d.code, d.name, d.description
                 ORDER BY d.code

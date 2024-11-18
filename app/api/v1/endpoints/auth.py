@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 # Create first superuser if no users exist
 async def create_first_superuser(db: Session):

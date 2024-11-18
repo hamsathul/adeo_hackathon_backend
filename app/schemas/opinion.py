@@ -1,5 +1,6 @@
 #app/schemas/opinion.py
 from pydantic import BaseModel, Field
+from fastapi import Form
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
@@ -37,8 +38,29 @@ class OpinionBase(BaseModel):
     recommendation: Optional[str] = None
 
 # Create Schemas
-class OpinionRequestCreate(OpinionRequestBase):
+class OpinionRequestCreate(BaseModel):
+    title: str
+    description: str
+    priority: PriorityEnum
     department_id: int
+    due_date: Optional[datetime] = None
+
+    @classmethod
+    def as_form(
+        cls,
+        title: str = Form(...),
+        description: str = Form(...),
+        priority: PriorityEnum = Form(...),
+        department_id: int = Form(...),
+        due_date: Optional[datetime] = Form(None)
+    ):
+        return cls(
+            title=title,
+            description=description,
+            priority=priority,
+            department_id=department_id,
+            due_date=due_date
+        )
 
 class DocumentCreate(DocumentBase):
     opinion_request_id: int

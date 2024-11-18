@@ -1,6 +1,9 @@
 # app/api/v1/endpoints/opinions.py
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
+from fastapi.encoders import jsonable_encoder
+import json
+from pydantic_core import ValidationError
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -11,6 +14,7 @@ from app.api import deps
 from app.core.security import get_current_active_user
 from app.db.session import get_db
 from app.models.auth import User
+from app.utils.file_storage import file_storage
 from app.models.opinion import (
     OpinionRequest,
     Document,
@@ -28,30 +32,117 @@ from app.schemas.opinion import (
     OpinionUpdate,
     OpinionReview,
     OpinionRequestWithDetails,
-    DocumentInDB
+    DocumentInDB,
+    PriorityEnum
 )
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 
 router = APIRouter()
 
-# Opinion Request Endpoints
-@router.post("/requests/", response_model=OpinionRequestInDB)
+@router.post(
+    "/requests/",
+    response_model=OpinionRequestInDB,
+    summary="Create a new opinion request",
+    description="""
+    Create a new opinion request with optional file attachment.
+    
+    **Form Data Fields:**
+    - `files`: File to upload (optional)
+    - `request_data`: JSON string with request details
+    
+    **Request Data Format:**
+    ```json
+    {
+        "title": "Test Request",
+        "description": "Test Description",
+        "priority": "Low",
+        "department_id": 1,
+        "due_date": "2024-12-31T23:59:59Z"
+    }
+    ```
+    
+    **Notes:**
+    - Priority must be one of: "Low", "Medium", "High", "Urgent"
+    - Supported file types: PDF, DOC, DOCX
+    - Maximum file size: 10MB
+    """,
+    responses={
+        200: {
+            "description": "Opinion request created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": 1,
+                        "reference_number": "OPN-12345678",
+                        "title": "Test Request",
+                        "description": "Test Description",
+                        "priority": "Low",
+                        "department_id": 1,
+                        "status": "unassigned",
+                        "documents": [
+                            {
+                                "id": 1,
+                                "file_name": "test.pdf",
+                                "file_type": "application/pdf",
+                                "file_size": 1024
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
+
+
+@router.post("/requests/")
 async def create_opinion_request(
     *,
     db: Session = Depends(get_db),
-    files: List[UploadFile] = File(None),
-    request_data: OpinionRequestCreate = Body(...),
+    files: Optional[UploadFile] = File(
+        default=None,
+        description="File to upload (PDF, DOC, DOCX)"
+    ),
+    request_data: str = Form(
+        ...,
+        description="JSON string containing request details"
+    ),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Create a new opinion request with optional file attachments."""
+    """Create a new opinion request with optional file attachment."""
     try:
+        # Log request_data
+        logging.debug(f"Request data: {request_data}")
+        
+        # Parse request_data JSON string
+        try:
+            request_dict = json.loads(request_data)
+            request_data = OpinionRequestCreate(**request_dict)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid JSON in request_data"
+            )
+        
+        # Log the parsed request data
+        logging.debug(f"Parsed request data: {request_dict}")
+
         # Create unique reference number
         reference_number = f"OPN-{uuid.uuid4().hex[:8].upper()}"
+        logging.debug(f"Generated reference number: {reference_number}")
         
         # Get initial status
         initial_status = db.query(WorkflowStatus).filter(
             WorkflowStatus.name == "unassigned"
         ).first()
+        if not initial_status:
+            raise HTTPException(status_code=404, detail="Initial status not found")
         
+        logging.debug(f"Initial status: {initial_status.name}")
+
         # Create opinion request
         opinion_request = OpinionRequest(
             reference_number=reference_number,
@@ -66,27 +157,47 @@ async def create_opinion_request(
         
         db.add(opinion_request)
         db.flush()
-        
-        # Handle file uploads if any
-        if files:
-            upload_dir = f"uploads/opinion_requests/{opinion_request.id}"
-            os.makedirs(upload_dir, exist_ok=True)
-            
-            for file in files:
-                file_path = os.path.join(upload_dir, file.filename)
-                with open(file_path, "wb+") as file_object:
-                    file_object.write(file.file.read())
+        logging.debug(f"Opinion request created with ID: {opinion_request.id}")
+
+        # Handle file upload if provided
+        if files and files.filename:
+            logging.debug(f"Received file: {files.filename}")
+            try:
+                # Create upload directory
+                upload_dir = f"uploads/opinion_requests/{opinion_request.id}"
+                os.makedirs(upload_dir, exist_ok=True)
+                logging.debug(f"Upload directory created: {upload_dir}")
                 
+                # Generate safe filename
+                safe_filename = f"{uuid.uuid4().hex}_{files.filename}"
+                file_path = os.path.join(upload_dir, safe_filename)
+                logging.debug(f"File will be saved to: {file_path}")
+                
+                # Save file
+                contents = await files.read()
+                with open(file_path, "wb") as f:
+                    f.write(contents)
+                logging.debug(f"File saved successfully: {file_path}")
+
+                # Create document record
                 document = Document(
                     opinion_request_id=opinion_request.id,
-                    file_name=file.filename,
+                    file_name=files.filename,
                     file_path=file_path,
-                    file_type=file.content_type,
-                    file_size=os.path.getsize(file_path),
+                    file_type=files.content_type,
+                    file_size=len(contents),
                     uploaded_by=current_user.id
                 )
                 db.add(document)
-        
+                logging.debug(f"Document record created: {document}")
+
+            except Exception as e:
+                logging.error(f"Error during file upload: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Error uploading file: {str(e)}"
+                )
+
         # Create workflow history
         history = WorkflowHistory(
             opinion_request_id=opinion_request.id,
@@ -94,17 +205,35 @@ async def create_opinion_request(
             action_by=current_user.id,
             from_status_id=None,
             to_status_id=initial_status.id,
-            action_details={"message": "Opinion request created"}
+            action_details={
+                "message": "Opinion request created",
+                "file_uploaded": bool(files and files.filename)
+            }
         )
         db.add(history)
-        
+        logging.debug(f"Workflow history created: {history}")
+
+        # Commit all changes
         db.commit()
+        db.refresh(opinion_request)
+        logging.debug(f"Database commit successful for request ID: {opinion_request.id}")
+        
         return opinion_request
 
+    except ValidationError as e:
+        logging.error(f"Validation error: {e}")
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException as e:
+        logging.error(f"HTTP exception: {e}")
+        db.rollback()
+        raise
     except Exception as e:
+        logging.error(f"Unexpected error: {e}")
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
+    
 @router.get("/requests/", response_model=List[OpinionRequestWithDetails])
 async def get_opinion_requests(
     *,

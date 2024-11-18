@@ -38,6 +38,17 @@ class Settings(BaseModel):
     
         # Database Settings - Using Docker service name 'db'
     DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/adeo_services"
+    
+     # Upload settings
+    UPLOAD_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE_MB: int = 10
+    ALLOWED_UPLOAD_TYPES: set = {
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    }
 
 @lru_cache()
 def get_settings() -> Settings:

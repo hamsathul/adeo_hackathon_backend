@@ -24,6 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create necessary directories
 RUN mkdir -p alembic/versions
 
+# Create uploads directory
+RUN mkdir -p /app/uploads && chmod 777 /app/uploads
+
 # Copy the project
 COPY . .
 

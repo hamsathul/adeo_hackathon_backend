@@ -5,6 +5,7 @@ services:
     container_name: fastapi_app
     volumes:
       - .:/app
+      - ./uploads:/app/uploads
     ports:
       - "8000:8000"
     environment:

@@ -45,3 +45,4 @@ migrate:
 
 init:
 	docker-compose exec api python scripts/manage_db.py init --force
+

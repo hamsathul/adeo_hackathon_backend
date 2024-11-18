@@ -3,6 +3,10 @@ from sqlalchemy.orm import Session
 from app.models.auth import User, Role, Permission
 from app.models.department import Department
 from app.core.security import get_password_hash
+from app.models.opinion import (
+    WorkflowStatus, 
+    CommunicationType
+)
 
 def init_permissions(db: Session) -> dict:
     """Initialize default permissions"""
@@ -369,6 +373,126 @@ def init_default_users(db: Session, roles: dict, departments: dict):
     
     db.commit()
     
+
+def init_workflow_statuses(db: Session) -> dict:
+    """Initialize default workflow statuses"""
+    statuses = {
+        "unassigned": "New request pending assignment",
+        "assigned_to_department": "Assigned to department",
+        "assigned_to_expert": "Assigned to expert",
+        "in_review": "Under review",
+        "additional_info_requested": "Additional information requested",
+        "pending_other_department": "Waiting for other department input",
+        "expert_opinion_submitted": "Expert has submitted opinion",
+        "head_review_pending": "Pending department head review",
+        "head_approved": "Approved by department head",
+        "completed": "Request completed",
+        "rejected": "Request rejected"
+    }
+    
+    status_objects = {}
+    for name, description in statuses.items():
+        db_status = db.query(WorkflowStatus).filter(
+            WorkflowStatus.name == name
+        ).first()
+        if not db_status:
+            db_status = WorkflowStatus(
+                name=name,
+                description=description
+            )
+            db.add(db_status)
+        status_objects[name] = db_status
+    
+    db.commit()
+    return status_objects
+
+def init_communication_types(db: Session) -> dict:
+    """Initialize default communication types"""
+    types = {
+        "opinion_request": {
+            "name": "Opinion Request",
+            "description": "Request for department opinion",
+            "requires_response": True,
+            "default_deadline_hours": 72
+        },
+        "information_request": {
+            "name": "Information Request",
+            "description": "Request for additional information",
+            "requires_response": True,
+            "default_deadline_hours": 48
+        },
+        "notification": {
+            "name": "Notification",
+            "description": "General notification",
+            "requires_response": False,
+            "default_deadline_hours": None
+        },
+        "escalation": {
+            "name": "Escalation",
+            "description": "Escalation of request",
+            "requires_response": True,
+            "default_deadline_hours": 24
+        },
+        "interdepartmental_consult": {
+            "name": "Interdepartmental Consultation",
+            "description": "Consultation between departments",
+            "requires_response": True,
+            "default_deadline_hours": 96
+        },
+        "status_update": {
+            "name": "Status Update",
+            "description": "Update on request status",
+            "requires_response": False,
+            "default_deadline_hours": None
+        }
+    }
+    
+    type_objects = {}
+    for code, data in types.items():
+        db_type = db.query(CommunicationType).filter(
+            CommunicationType.name == data["name"]
+        ).first()
+        if not db_type:
+            db_type = CommunicationType(**data)
+            db.add(db_type)
+        type_objects[code] = db_type
+    
+    db.commit()
+    return type_objects
+
+# Add new permissions for opinion system
+def add_opinion_permissions(db: Session, permissions: dict):
+    """Add opinion system specific permissions"""
+    opinion_permissions = {
+        # Workflow Management
+        "manage_workflow": "Can manage workflow statuses and transitions",
+        "view_workflow_history": "Can view workflow history",
+        
+        # Opinion Specific
+        "submit_opinion": "Can submit opinions",
+        "review_opinions": "Can review submitted opinions",
+        "approve_opinions": "Can approve opinions",
+        
+        # Communication
+        "send_communications": "Can send interdepartmental communications",
+        "respond_communications": "Can respond to communications",
+        "escalate_requests": "Can escalate requests",
+        
+        # Statistics and Reports
+        "view_opinion_statistics": "Can view opinion statistics",
+        "export_opinion_reports": "Can export opinion reports"
+    }
+    
+    for name, description in opinion_permissions.items():
+        if name not in permissions:
+            db_permission = Permission(name=name, description=description)
+            db.add(db_permission)
+            permissions[name] = db_permission
+    
+    db.commit()
+    return permissions
+
+# Update init_db function
 def init_db(db: Session) -> None:
     """Initialize database with default data"""
     try:
@@ -380,15 +504,23 @@ def init_db(db: Session) -> None:
 
         print("Starting database initialization...")
         
-        # Initialize in correct order to maintain relationships
         print("Initializing permissions...")
         permissions = init_permissions(db)
+        
+        print("Adding opinion system permissions...")
+        permissions = add_opinion_permissions(db, permissions)
         
         print("Initializing roles...")
         roles = init_roles(db, permissions)
         
         print("Initializing departments...")
         departments = init_departments(db)
+        
+        print("Initializing workflow statuses...")
+        workflow_statuses = init_workflow_statuses(db)
+        
+        print("Initializing communication types...")
+        communication_types = init_communication_types(db)
         
         print("Initializing default users...")
         init_default_users(db, roles, departments)
@@ -402,7 +534,7 @@ def init_db(db: Session) -> None:
     finally:
         db.close()
 
-# Optional: Add a function to check initialization status
+# Update check_init_status function
 def check_init_status(db: Session) -> dict:
     """Check the initialization status of the database"""
     try:
@@ -411,9 +543,12 @@ def check_init_status(db: Session) -> dict:
             "roles": db.query(Role).count(),
             "departments": db.query(Department).count(),
             "users": db.query(User).count(),
-            "superusers": db.query(User).filter(User.is_superuser == True).count()
+            "superusers": db.query(User).filter(User.is_superuser == True).count(),
+            "workflow_statuses": db.query(WorkflowStatus).count(),
+            "communication_types": db.query(CommunicationType).count()
         }
         return status
     except Exception as e:
         print(f"Error checking initialization status: {e}")
         raise
+    
