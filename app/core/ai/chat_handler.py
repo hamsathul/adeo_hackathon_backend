@@ -49,7 +49,7 @@ class ChatHandler:
         self.prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                "You are a helpful assistant for Abu Dhabi government executive office. your name is rashid. "
+                "You are a helpful assistant for Abu Dhabi government executive office. your name is rashid.you will greet the user only once in the conversation. "
                 " you will provide accurate and helpful information. your task is to assist the user in finding the information they need. "
                 "be polite and professional in your responses."
             ),

@@ -14,21 +14,8 @@ class ResearchResponse(BaseModel):
 @router.post("/analyze", response_model=ResearchResponse)
 async def analyze_topic(request: ResearchRequest):
     try:
-        # Validate query
-        if not request.query or len(request.query.strip()) == 0:
-            raise HTTPException(status_code=400, detail="Query cannot be empty")
-            
-        crew = AIResearchCrew(query=request.query)
-        results = crew.get_crew().kickoff()
-        
-        if isinstance(results, list):
-            result = results[0]
-        else:
-            result = results
-            
-        return ResearchResponse(
-            research_findings=result
-        )
+        crew = AIResearchCrew(request.query)
+        result = crew.run()
+        return ResearchResponse(research_findings=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

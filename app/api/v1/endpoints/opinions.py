@@ -98,23 +98,20 @@ router = APIRouter()
 )
 
 
+
+
+
 @router.post("/requests/")
 async def create_opinion_request(
     *,
     db: Session = Depends(get_db),
-    files: Optional[UploadFile] = File(
-        default=None,
-        description="File to upload (PDF, DOC, DOCX)"
-    ),
-    request_data: str = Form(
-        ...,
-        description="JSON string containing request details"
-    ),
+    files: Optional[List[UploadFile]] = File(default=None, description="List of files to upload (PDF, DOC, DOCX)"),
+    request_data: str = Form(..., description="JSON string containing request details"),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Create a new opinion request with optional file attachment."""
+    """Create a new opinion request with optional multiple file attachments."""
     try:
-        # Log request_data
+        # Log incoming request data for debugging
         logging.debug(f"Request data: {request_data}")
         
         # Parse request_data JSON string
@@ -122,28 +119,23 @@ async def create_opinion_request(
             request_dict = json.loads(request_data)
             request_data = OpinionRequestCreate(**request_dict)
         except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid JSON in request_data"
-            )
+            raise HTTPException(status_code=422, detail="Invalid JSON in request_data")
         
-        # Log the parsed request data
+        # Log parsed request data
         logging.debug(f"Parsed request data: {request_dict}")
 
-        # Create unique reference number
+        # Generate a unique reference number
         reference_number = f"OPN-{uuid.uuid4().hex[:8].upper()}"
         logging.debug(f"Generated reference number: {reference_number}")
         
-        # Get initial status
-        initial_status = db.query(WorkflowStatus).filter(
-            WorkflowStatus.name == "unassigned"
-        ).first()
+        # Get the initial "unassigned" status
+        initial_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "unassigned").first()
         if not initial_status:
             raise HTTPException(status_code=404, detail="Initial status not found")
         
         logging.debug(f"Initial status: {initial_status.name}")
 
-        # Create opinion request
+        # Create opinion request in the database
         opinion_request = OpinionRequest(
             reference_number=reference_number,
             title=request_data.title,
@@ -156,49 +148,48 @@ async def create_opinion_request(
         )
         
         db.add(opinion_request)
-        db.flush()
+        db.flush()  # Ensure opinion_request ID is available
         logging.debug(f"Opinion request created with ID: {opinion_request.id}")
 
-        # Handle file upload if provided
-        if files and files.filename:
-            logging.debug(f"Received file: {files.filename}")
-            try:
-                # Create upload directory
-                upload_dir = f"uploads/opinion_requests/{opinion_request.id}"
-                os.makedirs(upload_dir, exist_ok=True)
-                logging.debug(f"Upload directory created: {upload_dir}")
-                
-                # Generate safe filename
-                safe_filename = f"{uuid.uuid4().hex}_{files.filename}"
-                file_path = os.path.join(upload_dir, safe_filename)
-                logging.debug(f"File will be saved to: {file_path}")
-                
-                # Save file
-                contents = await files.read()
-                with open(file_path, "wb") as f:
-                    f.write(contents)
-                logging.debug(f"File saved successfully: {file_path}")
+        # Handle multiple file uploads if files are provided
+        if files:
+            # Create upload directory
+            upload_dir = f"uploads/opinion_requests/{opinion_request.id}"
+            os.makedirs(upload_dir, exist_ok=True)
+            logging.debug(f"Upload directory created: {upload_dir}")
 
-                # Create document record
-                document = Document(
-                    opinion_request_id=opinion_request.id,
-                    file_name=files.filename,
-                    file_path=file_path,
-                    file_type=files.content_type,
-                    file_size=len(contents),
-                    uploaded_by=current_user.id
-                )
-                db.add(document)
-                logging.debug(f"Document record created: {document}")
+            # Process each file uploaded
+            for file in files:
+                try:
+                    logging.debug(f"Processing file: {file.filename}")
+                    
+                    # Generate a safe filename and save the file
+                    safe_filename = f"{uuid.uuid4().hex}_{file.filename}"
+                    file_path = os.path.join(upload_dir, safe_filename)
+                    logging.debug(f"File will be saved to: {file_path}")
+                    
+                    contents = await file.read()
+                    with open(file_path, "wb") as f:
+                        f.write(contents)
+                    logging.debug(f"File saved successfully: {file_path}")
 
-            except Exception as e:
-                logging.error(f"Error during file upload: {e}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Error uploading file: {str(e)}"
-                )
+                    # Create document record for each file
+                    document = Document(
+                        opinion_request_id=opinion_request.id,
+                        file_name=file.filename,
+                        file_path=file_path,
+                        file_type=file.content_type,
+                        file_size=len(contents),
+                        uploaded_by=current_user.id
+                    )
+                    db.add(document)
+                    logging.debug(f"Document record created: {document}")
 
-        # Create workflow history
+                except Exception as e:
+                    logging.error(f"Error during file upload: {e}")
+                    raise HTTPException(status_code=400, detail=f"Error uploading file {file.filename}: {str(e)}")
+
+        # Create a workflow history record
         history = WorkflowHistory(
             opinion_request_id=opinion_request.id,
             action_type="created",
@@ -207,13 +198,13 @@ async def create_opinion_request(
             to_status_id=initial_status.id,
             action_details={
                 "message": "Opinion request created",
-                "file_uploaded": bool(files and files.filename)
+                "files_uploaded": len(files) if files else 0
             }
         )
         db.add(history)
         logging.debug(f"Workflow history created: {history}")
 
-        # Commit all changes
+        # Commit all changes to the database
         db.commit()
         db.refresh(opinion_request)
         logging.debug(f"Database commit successful for request ID: {opinion_request.id}")
@@ -232,6 +223,7 @@ async def create_opinion_request(
         logging.error(f"Unexpected error: {e}")
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+
 
     
 @router.get("/requests/", response_model=List[OpinionRequestWithDetails])
