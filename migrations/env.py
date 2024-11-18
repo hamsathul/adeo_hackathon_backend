@@ -14,6 +14,16 @@ from app.db.base_class import Base
 from app.models.auth import User, Role, Permission
 from app.models.department import Department
 from app.models.chat import ChatMessage
+from app.models.opinion import (
+    WorkflowStatus,
+    OpinionRequest,
+    Document,
+    RequestAssignment,
+    Opinion,
+    CommunicationType,
+    InterdepartmentalCommunication,
+    WorkflowHistory
+)
 from app.core.config import get_settings
 
 settings = get_settings()

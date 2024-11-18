@@ -8,7 +8,7 @@ from app.db.utils import check_database_connection
 from app.db.base_class import Base
 from typing import ForwardRef
 Role = ForwardRef('RoleSchema')
-from app.api.v1.endpoints import auth, roles, permissions, departments, analysis, crewai, googlecrew, search, documentprocessor
+from app.api.v1.endpoints import auth, roles, permissions, departments, analysis, crewai, googlecrew, search, documentprocessor, opinions
 from app.db.session import SessionLocal
 from datetime import datetime
 import uvicorn
@@ -52,6 +52,7 @@ app.include_router(googlecrew.router, prefix="/api/v1/google", tags=["googlesear
 app.include_router(search.router, prefix="/api/v1/search", tags=["search"])
 app.include_router(get_chat_router(), prefix="/api/v1/chat", tags=["chat"])
 app.include_router(documentprocessor.router, prefix="/api/v1/documentprocessor", tags=["Document Processor"])
+app.include_router(opinions.router, prefix="/api/v1/opinions", tags=["Opinion Management"])
 
 
 # Initialize SocketManager after routes are set up
