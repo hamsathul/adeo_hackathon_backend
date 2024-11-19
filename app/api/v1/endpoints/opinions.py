@@ -192,14 +192,13 @@ async def get_opinion_requests(
     limit: int = 20,
     status: Optional[str] = None,
     department_id: Optional[int] = None,
-    category_id: Optional[int] = None,  # Added
-    sub_category_id: Optional[int] = None,  # Added
-    priority: Optional[PriorityEnum] = None,  # Added
+    category_id: Optional[int] = None,
+    sub_category_id: Optional[int] = None,
+    priority: Optional[PriorityEnum] = None,
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get list of opinion requests with filtering options."""
     try:
         query = db.query(OpinionRequest).filter(OpinionRequest.is_deleted == False)
         
@@ -225,9 +224,6 @@ async def get_opinion_requests(
         if to_date:
             query = query.filter(OpinionRequest.created_at <= to_date)
         
-        # Get total count for pagination
-        total = query.count()
-        
         # Get requests with related data
         requests = (
             query
@@ -242,18 +238,34 @@ async def get_opinion_requests(
                 joinedload(OpinionRequest.opinions),
                 joinedload(OpinionRequest.assignments),
                 joinedload(OpinionRequest.workflow_history)
+                    .joinedload(WorkflowHistory.actor),
+                joinedload(OpinionRequest.workflow_history)
+                    .joinedload(WorkflowHistory.from_status),
+                joinedload(OpinionRequest.workflow_history)
+                    .joinedload(WorkflowHistory.to_status)
             )
             .order_by(OpinionRequest.created_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        
-        return requests
+
+        # Convert to Pydantic models
+        result = []
+        for request in requests:
+            request_dict = OpinionRequestWithDetails.from_orm(request)
+            # Ensure workflow_history is properly serialized
+            request_dict.workflow_history = [
+                WorkflowHistoryInDB.from_orm(history) 
+                for history in request.workflow_history
+            ]
+            result.append(request_dict)
+
+        return result
 
     except Exception as e:
         logging.error(f"Error fetching opinion requests: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/requests/{request_id}", response_model=OpinionRequestWithDetails)
 async def get_opinion_request(

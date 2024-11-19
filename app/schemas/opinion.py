@@ -311,9 +311,11 @@ class WorkflowHistoryInDB(WorkflowHistoryBase):
     from_status_id: Optional[int]
     to_status_id: Optional[int]
     created_at: datetime
+    action_type: str
+    action_details: Optional[Dict[str, Any]] = None
     
-    request: Optional['OpinionRequestInDB'] = None
-    actor: Optional['User'] = None
+    # Include these relations with proper typing
+    actor: Optional[UserBase] = None
     from_status: Optional[WorkflowStatusInDB] = None
     to_status: Optional[WorkflowStatusInDB] = None
 
@@ -322,8 +324,12 @@ class WorkflowHistoryInDB(WorkflowHistoryBase):
 
 # Additional Schemas
 class OpinionRequestWithDetails(OpinionRequestInDB):
-    workflow_history: List[Dict[str, Any]] = []
+    # Explicitly type workflow_history as a list of WorkflowHistoryInDB
+    workflow_history: List[WorkflowHistoryInDB] = []
     communications: List[Dict[str, Any]] = []
+
+    class Config:
+        from_attributes = True
 
 class OpinionReview(BaseModel):
     is_approved: bool

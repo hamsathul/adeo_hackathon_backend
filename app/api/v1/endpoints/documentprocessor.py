@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Dict, Optional, List
@@ -13,6 +13,7 @@ from datetime import datetime
 from app.db.session import get_db
 from app.core.config import get_settings
 from app.core.ai.documentanalyzer import DocumentAnalyzer
+from app.models.opinion import Document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -203,4 +204,57 @@ async def get_document_analysis(
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving analysis: {str(e)}"
+        )
+        
+@router.post("/analyze-document/existing/{document_id}", response_model=AnalysisResponse)
+async def analyze_existing_document(
+    document_id: int = Path(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze an existing document from the database
+    """
+    try:
+        # Get document from database
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get full file path
+        file_path = f"{get_settings().UPLOAD_DIR}/{document.file_path}"
+        
+        try:
+            # Read file content
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            
+            # Create mock UploadFile
+            file = UploadFile(
+                filename=document.file_name,
+                file=BytesIO(content)
+            )
+            file.content_type = document.file_type
+            
+            # Use existing analyze_document logic
+            return await analyze_document(file, db)
+            
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail="Document file not found on server"
+            )
+        except Exception as e:
+            logger.error(f"Error processing document: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing document: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in analyze_existing_document: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Server error: {str(e)}"
         )
