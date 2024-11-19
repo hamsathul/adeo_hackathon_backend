@@ -214,37 +214,109 @@ async def analyze_existing_document(
     """
     Analyze an existing document from the database
     """
+    logger.info(f"Starting analysis for existing document ID: {document_id}")
+    
     try:
         # Get document from database
+        logger.info(f"Fetching document {document_id} from database")
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
+            logger.error(f"Document {document_id} not found in database")
             raise HTTPException(status_code=404, detail="Document not found")
         
+        logger.info(f"Found document: {document.file_name} (ID: {document.id})")
+        
         # Get full file path
-        file_path = f"{get_settings().UPLOAD_DIR}/{document.file_path}"
+        settings = get_settings()
+        file_path = f"{document.file_path}"
+        logger.info(f"Constructed file path: {file_path}")
         
         try:
             # Read file content
+            logger.info(f"Attempting to read file from: {file_path}")
             with open(file_path, 'rb') as f:
                 content = f.read()
+            logger.info(f"Successfully read {len(content)} bytes from file")
             
             # Create mock UploadFile
-            file = UploadFile(
+            logger.info("Creating mock UploadFile object")
+            content_io = BytesIO(content)
+            mock_file = UploadFile(
                 filename=document.file_name,
-                file=BytesIO(content)
+                file=content_io,
+                size=len(content),
+                headers={"content-type": document.file_type} 
             )
-            file.content_type = document.file_type
+            mock_file._file = content_io
+            logger.info(f"Created mock file with name: {mock_file.filename} and type: {mock_file.content_type}")
             
-            # Use existing analyze_document logic
-            return await analyze_document(file, db)
+            # Extract text
+            logger.info("Starting text extraction")
+            text = await extract_text_from_file(mock_file)
+            logger.info(f"Successfully extracted {len(text)} characters of text")
+            
+            # Generate document ID
+            document_id = str(uuid4())
+            logger.info(f"Generated analysis ID: {document_id}")
+            
+            # Initialize analyzer
+            logger.info("Initializing DocumentAnalyzer")
+            analyzer = DocumentAnalyzer(
+                content=text,
+                database_url=settings.DATABASE_URL,
+                openai_api_key=settings.OPENAI_API_KEY
+            )
+            
+            # Process document
+            logger.info("Starting document analysis...")
+            result = await analyzer.analyze()
+            logger.info("Analysis completed successfully")
+            
+            # Log analysis results summary
+            logger.info(f"""
+            Analysis Results Summary:
+            - Document IDs: {len(result.get('document_ids', []))}
+            - Similar Documents: {len(result.get('similar_documents', []))}
+            - Analysis Status: Completed
+            """)
+            
+            # Prepare metadata
+            metadata = {
+                "filename": document.file_name,
+                "content_type": document.file_type,
+                "text_length": len(text),
+                "processing_time": datetime.utcnow().isoformat(),
+                "chunks_processed": len(result.get('document_ids', [])),
+                "similar_docs_found": len(result.get('similar_documents', []))
+            }
+            logger.info(f"Prepared metadata: {metadata}")
+            
+            response = AnalysisResponse(
+                document_id=document_id,
+                status="completed",
+                analysis_result=result,
+                metadata=metadata
+            )
+            logger.info("Successfully prepared analysis response")
+            return response
             
         except FileNotFoundError:
+            error_msg = f"File not found: {file_path}"
+            logger.error(error_msg)
             raise HTTPException(
                 status_code=404,
                 detail="Document file not found on server"
             )
         except Exception as e:
-            logger.error(f"Error processing document: {str(e)}", exc_info=True)
+            error_msg = f"Error processing document: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            logger.error(f"""
+            Processing Error Details:
+            - Document ID: {document_id}
+            - File Path: {file_path}
+            - Error Type: {type(e).__name__}
+            - Error Message: {str(e)}
+            """)
             raise HTTPException(
                 status_code=500,
                 detail=f"Error processing document: {str(e)}"
@@ -253,7 +325,15 @@ async def analyze_existing_document(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in analyze_existing_document: {str(e)}", exc_info=True)
+        error_msg = f"Error in analyze_existing_document: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        logger.error(f"""
+        General Error Details:
+        - Document ID: {document_id}
+        - Error Type: {type(e).__name__}
+        - Error Message: {str(e)}
+        - Stack Trace: Available in logs
+        """)
         raise HTTPException(
             status_code=500,
             detail=f"Server error: {str(e)}"
