@@ -84,7 +84,7 @@ class Document(Base):
     opinion_request_id = Column(Integer, ForeignKey("opinion_requests.id"))
     file_name = Column(String(255), nullable=False)
     file_path = Column(String(512), nullable=False)
-    file_type = Column(String(50))
+    file_type = Column(String(255))
     file_size = Column(Integer)
     file_url = Column(String(512))  # New - for storing URLs
     uploaded_by = Column(Integer, ForeignKey("users.id"))
@@ -92,13 +92,6 @@ class Document(Base):
     
     request = relationship("OpinionRequest", back_populates="documents")
     uploader = relationship("User", back_populates="uploaded_documents")
-    
-    __table_args__ = (
-        CheckConstraint(
-            file_type.in_(['pdf', 'doc', 'docx', 'xls', 'xlsx']),
-            name='valid_file_type'
-        ),
-    )
     
 class Category(Base):
     __tablename__ = "categories"
@@ -108,6 +101,7 @@ class Category(Base):
     created_at = Column(DateTime, server_default=func.now())
     
     opinion_requests = relationship("OpinionRequest", back_populates="category_rel")
+    subcategories = relationship("SubCategory", back_populates="category")
 
 class SubCategory(Base):
     __tablename__ = "subcategories"
@@ -117,7 +111,7 @@ class SubCategory(Base):
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     
-    category = relationship("Category")
+    category = relationship("Category", back_populates="subcategories")
     opinion_requests = relationship("OpinionRequest", back_populates="subcategory_rel")
     
     __table_args__ = (

@@ -353,6 +353,36 @@ class WorkflowStatusList(BaseModel):
     class Config:
         from_attributes = True
 
+# Category Schemas
+class SubCategoryBase(BaseModel):
+    id: int
+    name: str
+    category_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CategoryBase(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CategoryWithSubcategories(CategoryBase):
+    subcategories: List[SubCategoryBase] = []
+
+    class Config:
+        from_attributes = True
+
+class CategoryList(BaseModel):
+    total: int
+    items: List[CategoryWithSubcategories]
+
+    class Config:
+        from_attributes = True
 
 OpinionInDB.model_rebuild()
 DocumentInDB.model_rebuild()

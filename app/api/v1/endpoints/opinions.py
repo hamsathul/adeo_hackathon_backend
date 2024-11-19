@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from fastapi.encoders import jsonable_encoder
 import json
 from fastapi.responses import FileResponse
+from openai import files
 from pydantic_core import ValidationError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
-from typing import List, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 import uuid
 import os
@@ -33,6 +34,8 @@ from app.models.opinion import (
 )
 from app.schemas.base import UserBase, DepartmentBase
 from app.schemas.opinion import (
+    CategoryList,
+    CategoryWithSubcategories,
     OpinionRequestCreate,
     OpinionRequestInDB,
     OpinionRequestUpdate,
@@ -43,11 +46,13 @@ from app.schemas.opinion import (
     OpinionRequestWithDetails,
     DocumentInDB,
     RemarkInDB,
+    SubCategoryBase,
     WorkflowHistoryInDB,
     PriorityEnum,
     WorkflowStatusBase,
     WorkflowStatusList
 )
+from app.models.opinion import Category, SubCategory
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -58,7 +63,9 @@ router = APIRouter()
 async def create_opinion_request(
     *,
     db: Session = Depends(get_db),
-    files: Optional[List[UploadFile]] = File(default=None),
+    file1: UploadFile = File(None),
+    file2: UploadFile = File(None),
+    file3: UploadFile = File(None),
     request_data: str = Form(...),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -66,13 +73,8 @@ async def create_opinion_request(
     try:
         logging.debug(f"Request data: {request_data}")
         
-        try:
-            request_dict = json.loads(request_data)
-            request_data = OpinionRequestCreate(**request_dict)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=422, detail="Invalid JSON in request_data")
-        
-        logging.debug(f"Parsed request data: {request_dict}")
+        request_dict = json.loads(request_data)
+        request_data = OpinionRequestCreate(**request_dict)
 
         # Validate category and subcategory
         category = db.query(Category).filter(Category.id == request_data.category_id).first()
@@ -92,7 +94,7 @@ async def create_opinion_request(
         if not initial_status:
             raise HTTPException(status_code=404, detail="Initial status not found")
 
-        # Create opinion request with new fields
+        # Create opinion request
         opinion_request = OpinionRequest(
             reference_number=reference_number,
             title=request_data.title,
@@ -117,20 +119,23 @@ async def create_opinion_request(
             decision_draft=request_data.decision_draft,
             version=1
         )
-        
         db.add(opinion_request)
         db.flush()
 
         # Handle file uploads
+        uploaded_files = []
+        files = [file1, file2, file3]
+        files = [f for f in files if f is not None]
+        
         if files:
             upload_dir = f"uploads/opinion_requests/{opinion_request.id}"
             os.makedirs(upload_dir, exist_ok=True)
 
             for file in files:
+                safe_filename = f"{uuid.uuid4().hex}_{file.filename}"
+                file_path = os.path.join(upload_dir, safe_filename)
+
                 try:
-                    safe_filename = f"{uuid.uuid4().hex}_{file.filename}"
-                    file_path = os.path.join(upload_dir, safe_filename)
-                    
                     contents = await file.read()
                     with open(file_path, "wb") as f:
                         f.write(contents)
@@ -145,6 +150,7 @@ async def create_opinion_request(
                         uploaded_by=current_user.id
                     )
                     db.add(document)
+                    uploaded_files.append(file.filename)
 
                 except Exception as e:
                     logging.error(f"Error during file upload: {e}")
@@ -157,30 +163,24 @@ async def create_opinion_request(
             action_by=current_user.id,
             from_status_id=None,
             to_status_id=initial_status.id,
-            action_details={
-                "message": "Opinion request created",
-                "files_uploaded": len(files) if files else 0
-            }
+            action_details={"message": "Opinion request created", "files_uploaded": len(uploaded_files)},
         )
         db.add(history)
 
         db.commit()
         db.refresh(opinion_request)
-        
+
         return opinion_request
 
     except ValidationError as e:
         logging.error(f"Validation error: {e}")
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
-    except HTTPException as e:
-        logging.error(f"HTTP exception: {e}")
-        db.rollback()
-        raise
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
     
@@ -1385,4 +1385,132 @@ async def search_workflow_status(
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error while searching workflow statuses: {str(e)}"
+        )
+        
+        
+# Category and Subcategory endpoints
+@router.get("/categories/", response_model=CategoryList)
+async def get_categories(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    Fetch all categories with their subcategories.
+    """
+    try:
+        # Get total count
+        total = db.query(Category).count()
+
+        # Get categories with subcategories
+        categories = (
+            db.query(Category)
+            .options(joinedload(Category.subcategories))
+            .order_by(Category.name)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+        # Convert to CategoryList format
+        return {
+            "total": total,
+            "items": [
+                {
+                    "id": cat.id,
+                    "name": cat.name,
+                    "created_at": cat.created_at,
+                    "subcategories": [
+                        {
+                            "id": sub.id,
+                            "name": sub.name,
+                            "category_id": sub.category_id,
+                            "created_at": sub.created_at
+                        }
+                        for sub in cat.subcategories
+                    ]
+                }
+                for cat in categories
+            ]
+        }
+
+    except Exception as e:
+        logging.error(f"Error fetching categories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while fetching categories: {str(e)}"
+        )
+
+@router.get("/categories/structured", response_model=Dict[str, List[str]])
+async def get_structured_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get categories and subcategories in a structured format matching the React constants.
+    Returns:
+        Dict[str, List[str]]: Dictionary with category names as keys and lists of subcategory names as values
+    """
+    try:
+        categories = (
+            db.query(Category)
+            .options(joinedload(Category.subcategories))
+            .order_by(Category.name)
+            .all()
+        )
+
+        return {
+            cat.name: [sub.name for sub in cat.subcategories]
+            for cat in categories
+        }
+
+    except Exception as e:
+        logging.error(f"Error fetching structured categories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while fetching structured categories: {str(e)}"
+        )
+
+@router.get("/categories/{category_id}/subcategories", response_model=List[SubCategoryBase])
+async def get_category_subcategories(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get all subcategories for a specific category.
+    """
+    try:
+        category = (
+            db.query(Category)
+            .options(joinedload(Category.subcategories))
+            .filter(Category.id == category_id)
+            .first()
+        )
+
+        if not category:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Category with ID {category_id} not found"
+            )
+
+        return [
+            {
+                "id": sub.id,
+                "name": sub.name,
+                "category_id": sub.category_id,
+                "created_at": sub.created_at
+            }
+            for sub in category.subcategories
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching subcategories for category {category_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while fetching subcategories: {str(e)}"
         )

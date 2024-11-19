@@ -1,8 +1,8 @@
 """Initial_migration
 
-Revision ID: 799905a4d0b9
+Revision ID: 6a16c3891a51
 Revises: 
-Create Date: 2024-11-18 21:49:05.981360
+Create Date: 2024-11-19 00:30:51.193374
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '799905a4d0b9'
+revision: str = '6a16c3891a51'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -165,12 +165,11 @@ def upgrade() -> None:
     sa.Column('opinion_request_id', sa.Integer(), nullable=True),
     sa.Column('file_name', sa.String(length=255), nullable=False),
     sa.Column('file_path', sa.String(length=512), nullable=False),
-    sa.Column('file_type', sa.String(length=50), nullable=True),
+    sa.Column('file_type', sa.String(length=255), nullable=True),
     sa.Column('file_size', sa.Integer(), nullable=True),
     sa.Column('file_url', sa.String(length=512), nullable=True),
     sa.Column('uploaded_by', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=True),
-    sa.CheckConstraint("file_type IN ('pdf', 'doc', 'docx', 'xls', 'xlsx')", name='valid_file_type'),
     sa.ForeignKeyConstraint(['opinion_request_id'], ['opinion_requests.id'], ),
     sa.ForeignKeyConstraint(['uploaded_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
